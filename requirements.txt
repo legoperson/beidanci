@@ -1,8 +1,9 @@
+streamlit>=1.22.0
+pandas>=1.5.3
+openpyxl>=3.1.2
 random
-pandas
 os
 time
-streamlit
 gTTS
 pygame
 tempfile

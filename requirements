@@ -3,7 +3,7 @@ pandas
 os
 time
 streamlit
-gtts
+gTTS
 pygame
 tempfile
 threading

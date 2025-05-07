@@ -14,7 +14,7 @@ class VocabularyPractice:
     
     def load_words_from_excel(self, file_path):
         """
-        Load words from Excel file
+        Load words from Excel file - collect words from all columns
         
         Args:
             file_path: Path to the Excel file
@@ -26,10 +26,15 @@ class VocabularyPractice:
             # Read Excel file
             df = pd.read_excel(file_path)
             
-            # Get words from the first column
+            # Check if file has any columns
             if len(df.columns) > 0:
-                words_column = df.iloc[:, 0]  # Get the first column
-                self.words = [str(word).strip() for word in words_column if str(word).strip()]  # Convert to list and remove whitespace
+                # Collect words from all columns
+                all_words = []
+                for column in df.columns:
+                    column_words = [str(word).strip() for word in df[column] if str(word).strip() and str(word).lower() != 'nan']
+                    all_words.extend(column_words)
+                
+                self.words = all_words
                 self.used_words = set()  # Reset used words
                 return len(self.words) > 0
             else:

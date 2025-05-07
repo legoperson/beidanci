@@ -174,7 +174,7 @@ def main():
                     if word:
                         st.session_state.current_word_component = get_text_to_speech_html(word)
                         st.session_state.feedback = None  # Reset feedback
-                        st.experimental_rerun()
+                        st.rerun()
         
         # Only show the practice area if playing
         if st.session_state.is_playing:
@@ -199,7 +199,7 @@ def main():
                         st.session_state.feedback = f"❌ Incorrect. The correct spelling is: {st.session_state.vocab_practice.current_word}"
                     
                     # Get ready for next word
-                    st.experimental_rerun()
+                    st.rerun()
             
             # Display feedback
             if st.session_state.feedback:
@@ -211,7 +211,7 @@ def main():
                     if word:
                         st.session_state.current_word_component = get_text_to_speech_html(word)
                         st.session_state.feedback = None  # Reset feedback
-                        st.experimental_rerun()
+                        st.rerun()
 
 if __name__ == "__main__":
     main()

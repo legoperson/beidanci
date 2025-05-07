@@ -3,8 +3,6 @@ import pandas as pd
 import os
 import streamlit as st
 import time
-import base64
-from io import BytesIO
 
 class VocabularyPractice:
     def __init__(self):
@@ -14,19 +12,19 @@ class VocabularyPractice:
         self.current_word = None
         self.is_playing = False
     
-    def load_words_from_excel(self, file):
+    def load_words_from_excel(self, file_path):
         """
         Load words from Excel file
         
         Args:
-            file: Uploaded file or file path
+            file_path: Path to the Excel file
             
         Returns:
             bool: Success or failure
         """
         try:
             # Read Excel file
-            df = pd.read_excel(file)
+            df = pd.read_excel(file_path)
             
             # Get words from the first column
             if len(df.columns) > 0:
@@ -123,9 +121,20 @@ def main():
     st.title("📚 Vocabulary Practice App")
     st.write("Practice your vocabulary spelling with this app!")
     
+    # Define the path to the wordlist file in the repository
+    wordlist_path = "wordlist.xlsx"
+    
     # Initialize session state
     if 'vocab_practice' not in st.session_state:
         st.session_state.vocab_practice = VocabularyPractice()
+        # Try to load words immediately from local file
+        if os.path.exists(wordlist_path):
+            if st.session_state.vocab_practice.load_words_from_excel(wordlist_path):
+                st.success(f"Successfully loaded {len(st.session_state.vocab_practice.words)} words from {wordlist_path}!")
+            else:
+                st.error(f"Failed to load words from {wordlist_path}.")
+        else:
+            st.error(f"Word list file not found at {wordlist_path}.")
     
     if 'is_playing' not in st.session_state:
         st.session_state.is_playing = False
@@ -142,14 +151,6 @@ def main():
     if 'current_word_component' not in st.session_state:
         st.session_state.current_word_component = None
     
-    # File uploader
-    uploaded_file = st.file_uploader("Upload an Excel file with words in the first column:", type=['xlsx', 'xls'])
-    
-    if uploaded_file is not None:
-        if st.button("Load Words"):
-            if st.session_state.vocab_practice.load_words_from_excel(uploaded_file):
-                st.success(f"Successfully loaded {len(st.session_state.vocab_practice.words)} words!")
-                
     # Display word count if words are loaded
     if hasattr(st.session_state.vocab_practice, 'words') and st.session_state.vocab_practice.words:
         st.write(f"Total words: {len(st.session_state.vocab_practice.words)}")

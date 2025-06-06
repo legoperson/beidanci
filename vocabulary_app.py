@@ -127,7 +127,7 @@ def main():
     st.write("Practice your vocabulary spelling with this app!")
     
     # Define the path to the wordlist file in the repository
-    wordlist_path = "wordlist.xlsx"
+    wordlist_path = "level234.xlsx"
     
     # Initialize session state
     if 'vocab_practice' not in st.session_state:

@@ -155,6 +155,10 @@ def main():
         
     if 'current_word_component' not in st.session_state:
         st.session_state.current_word_component = None
+        
+    # 添加一个状态来跟踪是否已经检查过拼写
+    if 'spell_checked' not in st.session_state:
+        st.session_state.spell_checked = False
     
     # Display word count if words are loaded
     if hasattr(st.session_state.vocab_practice, 'words') and st.session_state.vocab_practice.words:
@@ -179,6 +183,7 @@ def main():
                     if word:
                         st.session_state.current_word_component = get_text_to_speech_html(word)
                         st.session_state.feedback = None  # Reset feedback
+                        st.session_state.spell_checked = False  # Reset spell check status
                         st.rerun()
         
         # Only show the practice area if playing
@@ -189,22 +194,24 @@ def main():
             if st.session_state.current_word_component:
                 st.components.v1.html(st.session_state.current_word_component, height=70)
             
-            with st.form(key="spelling_form"):
-                user_spelling = st.text_input("Your spelling:", key="spelling_input")
-                submit_button = st.form_submit_button("Check Spelling")
-                
-                if submit_button:
-                    is_correct = st.session_state.vocab_practice.check_spelling(user_spelling)
-                    st.session_state.total_count += 1
+            # 只有在没有检查过拼写时才显示输入表单
+            if not st.session_state.spell_checked:
+                with st.form(key="spelling_form"):
+                    user_spelling = st.text_input("Your spelling:", key="spelling_input")
+                    submit_button = st.form_submit_button("Check Spelling")
                     
-                    if is_correct:
-                        st.session_state.feedback = "✅ Correct!"
-                        st.session_state.correct_count += 1
-                    else:
-                        st.session_state.feedback = f"❌ Incorrect. The correct spelling is: {st.session_state.vocab_practice.current_word}"
-                    
-                    # Get ready for next word
-                    st.rerun()
+                    if submit_button and user_spelling:  # 确保有输入内容
+                        is_correct = st.session_state.vocab_practice.check_spelling(user_spelling)
+                        st.session_state.total_count += 1
+                        st.session_state.spell_checked = True  # 标记已经检查过
+                        
+                        if is_correct:
+                            st.session_state.feedback = "✅ Correct!"
+                            st.session_state.correct_count += 1
+                        else:
+                            st.session_state.feedback = f"❌ Incorrect. The correct spelling is: {st.session_state.vocab_practice.current_word}"
+                        
+                        st.rerun()
             
             # Display feedback
             if st.session_state.feedback:
@@ -216,6 +223,7 @@ def main():
                     if word:
                         st.session_state.current_word_component = get_text_to_speech_html(word)
                         st.session_state.feedback = None  # Reset feedback
+                        st.session_state.spell_checked = False  # Reset spell check status for new word
                         st.rerun()
 
 if __name__ == "__main__":

@@ -224,7 +224,7 @@ def get_text_to_speech_html(word, example=""):
 
 # Streamlit app
 def main():
-    st.set_page_config(page_title="Vocabulary Practice", page_icon="📚")
+    st.set_page_config(page_title="Vocabulary Learn Practice", page_icon="📚")
     
     st.title("📚 Vocabulary Practice App")
     st.write("Practice your vocabulary spelling with this app!")

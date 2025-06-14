@@ -3,13 +3,14 @@ import pandas as pd
 import os
 import streamlit as st
 import time
+import requests
 from datetime import datetime, timedelta
 
 class VocabularyPractice:
     def __init__(self):
         """Initialize the vocabulary practice class"""
         self.words = []
-        self.word_meanings = {}  # Store word meanings
+        self.word_meanings = {}  # Store cached word meanings
         self.used_words = set()
         self.current_word = None
         self.is_playing = False
@@ -19,7 +20,7 @@ class VocabularyPractice:
     
     def load_words_from_excel(self, file_path):
         """
-        Load words from Excel file - collect words and meanings from columns
+        Load words from Excel file - collect words from all columns
         
         Args:
             file_path: Path to the Excel file
@@ -33,35 +34,13 @@ class VocabularyPractice:
             
             # Check if file has any columns
             if len(df.columns) > 0:
-                # If there are at least 2 columns, assume first is word, second is meaning
-                if len(df.columns) >= 2:
-                    word_col = df.columns[0]
-                    meaning_col = df.columns[1]
-                    
-                    # Collect words and meanings
-                    all_words = []
-                    word_meanings = {}
-                    
-                    for idx, row in df.iterrows():
-                        word = str(row[word_col]).strip()
-                        meaning = str(row[meaning_col]).strip()
-                        
-                        if word and word.lower() != 'nan' and meaning and meaning.lower() != 'nan':
-                            all_words.append(word)
-                            word_meanings[word] = meaning
-                    
-                    self.words = all_words
-                    self.word_meanings = word_meanings
-                else:
-                    # Only one column, collect words only
-                    all_words = []
-                    for column in df.columns:
-                        column_words = [str(word).strip() for word in df[column] if str(word).strip() and str(word).lower() != 'nan']
-                        all_words.extend(column_words)
-                    
-                    self.words = all_words
-                    self.word_meanings = {}  # No meanings available
+                # Collect words from all columns
+                all_words = []
+                for column in df.columns:
+                    column_words = [str(word).strip() for word in df[column] if str(word).strip() and str(word).lower() != 'nan']
+                    all_words.extend(column_words)
                 
+                self.words = all_words
                 self.used_words = set()  # Reset used words
                 return len(self.words) > 0
             else:
@@ -71,9 +50,52 @@ class VocabularyPractice:
             st.error(f"Error reading Excel file: {e}")
             return False
     
+    def get_word_meaning_online(self, word):
+        """
+        Get word meaning from online dictionary API
+        
+        Args:
+            word (str): The word to look up
+            
+        Returns:
+            str: The meaning of the word
+        """
+        # Check if we already have the meaning cached
+        if word in self.word_meanings:
+            return self.word_meanings[word]
+        
+        try:
+            # Use Free Dictionary API
+            url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word.lower()}"
+            response = requests.get(url, timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0:
+                    # Get the first definition
+                    entry = data[0]
+                    if 'meanings' in entry and len(entry['meanings']) > 0:
+                        meaning = entry['meanings'][0]
+                        if 'definitions' in meaning and len(meaning['definitions']) > 0:
+                            definition = meaning['definitions'][0]['definition']
+                            # Cache the meaning
+                            self.word_meanings[word] = definition
+                            return definition
+            
+            # Fallback: if API fails, return a placeholder
+            fallback_meaning = f"Definition for '{word}' (API unavailable)"
+            self.word_meanings[word] = fallback_meaning
+            return fallback_meaning
+            
+        except Exception as e:
+            # If there's any error, return a placeholder
+            fallback_meaning = f"Definition for '{word}' (Error: {str(e)[:50]}...)"
+            self.word_meanings[word] = fallback_meaning
+            return fallback_meaning
+    
     def select_study_words(self, n):
         """
-        Select n random words for study session
+        Select n random words for study session and fetch their meanings
         
         Args:
             n (int): Number of words to select
@@ -88,6 +110,19 @@ class VocabularyPractice:
         n = min(n, len(self.words))
         self.study_words = random.sample(self.words, n)
         self.used_words = set()  # Reset used words for this study session
+        
+        # Pre-fetch meanings for all study words
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, word in enumerate(self.study_words):
+            status_text.text(f"Loading meaning for: {word}")
+            self.get_word_meaning_online(word)
+            progress_bar.progress((i + 1) / len(self.study_words))
+        
+        progress_bar.empty()
+        status_text.empty()
+        
         return self.study_words
     
     def get_random_study_word(self):
@@ -251,6 +286,9 @@ def main():
         
     if 'study_words_selected' not in st.session_state:
         st.session_state.study_words_selected = False
+        
+    if 'meanings_loaded' not in st.session_state:
+        st.session_state.meanings_loaded = False
     
     # Display word count if words are loaded
     if hasattr(st.session_state.vocab_practice, 'words') and st.session_state.vocab_practice.words:
@@ -262,14 +300,17 @@ def main():
             
             col1, col2 = st.columns([2, 1])
             with col1:
-                n_words = st.number_input("Number of words to study:", min_value=1, max_value=len(st.session_state.vocab_practice.words), value=10)
+                n_words = st.number_input("Number of words to study:", min_value=1, max_value=min(50, len(st.session_state.vocab_practice.words)), value=10)
+                st.info("💡 Note: Word meanings will be fetched from online dictionary")
             with col2:
                 if st.button("Select Words for Study"):
-                    selected_words = st.session_state.vocab_practice.select_study_words(n_words)
-                    if selected_words:
-                        st.session_state.study_words_selected = True
-                        st.session_state.study_mode = False
-                        st.rerun()
+                    with st.spinner("Selecting words and loading meanings..."):
+                        selected_words = st.session_state.vocab_practice.select_study_words(n_words)
+                        if selected_words:
+                            st.session_state.study_words_selected = True
+                            st.session_state.meanings_loaded = True
+                            st.session_state.study_mode = False
+                            st.rerun()
         
         # Show study words and meanings
         if st.session_state.study_words_selected and not st.session_state.study_mode and not st.session_state.is_playing:
@@ -284,20 +325,23 @@ def main():
         # Study mode - show words and meanings
         if st.session_state.study_mode and not st.session_state.is_playing:
             st.subheader("📖 Learning Phase")
+            st.write("Study these words and their meanings:")
             
-            # Show study words with meanings
+            # Show study words with meanings in a nice format
             for i, word in enumerate(st.session_state.vocab_practice.study_words, 1):
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    st.write(f"**{i}. {word}**")
-                with col2:
-                    meaning = st.session_state.vocab_practice.word_meanings.get(word, "No meaning available")
-                    st.write(f"*{meaning}*")
+                with st.container():
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        st.markdown(f"**{i}. {word}**")
+                    with col2:
+                        meaning = st.session_state.vocab_practice.word_meanings.get(word, "Loading meaning...")
+                        st.markdown(f"*{meaning}*")
+                    st.divider()
             
             # Check if 5 minutes have passed
             if st.session_state.vocab_practice.can_start_test():
                 st.success("✅ 5 minutes study time completed!")
-                if st.button("Start Test"):
+                if st.button("Start Test", type="primary"):
                     st.session_state.is_playing = True
                     # Get first word from study words
                     word = st.session_state.vocab_practice.get_random_study_word()
@@ -317,13 +361,16 @@ def main():
                     minutes = remaining_seconds // 60
                     seconds = remaining_seconds % 60
                     st.info(f"⏰ Study time remaining: {minutes:02d}:{seconds:02d}")
-                    # Auto-refresh every second
-                    time.sleep(1)
-                    st.rerun()
+                    # Auto-refresh every 10 seconds to avoid too frequent updates
+                    if remaining_seconds % 10 == 0:
+                        time.sleep(1)
+                        st.rerun()
+                else:
+                    st.rerun()  # Refresh to show the test button
         
         # Test mode (existing functionality, but using study words)
         if st.session_state.is_playing:
-            st.write(f"Words practiced this session: {len(st.session_state.vocab_practice.used_words)}")
+            st.write(f"Words practiced this session: {len(st.session_state.vocab_practice.used_words)}/{len(st.session_state.vocab_practice.study_words)}")
             
             # Stats display
             if st.session_state.total_count > 0:
@@ -337,6 +384,7 @@ def main():
                     st.session_state.is_playing = False
                     st.session_state.study_words_selected = False
                     st.session_state.study_mode = False
+                    st.session_state.meanings_loaded = False
                     st.session_state.correct_count = 0
                     st.session_state.total_count = 0
                     st.session_state.feedback = None
@@ -375,10 +423,10 @@ def main():
             if st.session_state.feedback:
                 st.markdown(f"### {st.session_state.feedback}")
                 
-                # Show meaning if available
+                # Show meaning
                 if st.session_state.vocab_practice.current_word in st.session_state.vocab_practice.word_meanings:
                     meaning = st.session_state.vocab_practice.word_meanings[st.session_state.vocab_practice.current_word]
-                    st.write(f"**Meaning:** {meaning}")
+                    st.markdown(f"**Meaning:** *{meaning}*")
                 
                 # Next word button
                 if st.button("Next Word"):

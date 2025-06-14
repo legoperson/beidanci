@@ -10,7 +10,8 @@ class VocabularyPractice:
     def __init__(self):
         """Initialize the vocabulary practice class"""
         self.words = []
-        self.word_meanings = {}  # Store cached word meanings
+        self.word_meanings = {}  # Store word meanings from CSV file
+        self.word_examples = {}  # Store word examples from CSV file
         self.used_words = set()
         self.current_word = None
         self.is_playing = False
@@ -18,84 +19,59 @@ class VocabularyPractice:
         self.study_mode = False  # Whether in study mode
         self.study_start_time = None
     
-    def load_words_from_excel(self, file_path):
+    def load_words_from_csv(self, file_path):
         """
-        Load words from Excel file - collect words from all columns
+        Load words, meanings, and examples from CSV file
+        Expected format: Column 1 = Word, Column 2 = Meaning, Column 3 = Example
         
         Args:
-            file_path: Path to the Excel file
+            file_path: Path to the CSV file
             
         Returns:
             bool: Success or failure
         """
         try:
-            # Read Excel file
-            df = pd.read_excel(file_path)
+            # Read CSV file
+            df = pd.read_csv(file_path)
             
-            # Check if file has any columns
-            if len(df.columns) > 0:
-                # Collect words from all columns
-                all_words = []
-                for column in df.columns:
-                    column_words = [str(word).strip() for word in df[column] if str(word).strip() and str(word).lower() != 'nan']
-                    all_words.extend(column_words)
+            # Check if file has at least 3 columns
+            if len(df.columns) >= 3:
+                # Clear existing data
+                self.words = []
+                self.word_meanings = {}
+                self.word_examples = {}
                 
-                self.words = all_words
+                # Get column names (use first 3 columns regardless of names)
+                word_col = df.columns[0]
+                meaning_col = df.columns[1] 
+                example_col = df.columns[2]
+                
+                # Load words, meanings and examples
+                for index, row in df.iterrows():
+                    word = str(row[word_col]).strip()
+                    meaning = str(row[meaning_col]).strip()
+                    example = str(row[example_col]).strip()
+                    
+                    if word and word.lower() != 'nan' and meaning and meaning.lower() != 'nan':
+                        self.words.append(word)
+                        self.word_meanings[word.lower()] = meaning
+                        if example and example.lower() != 'nan':
+                            self.word_examples[word.lower()] = example
+                        else:
+                            self.word_examples[word.lower()] = f"Example sentence for {word}."
+                
                 self.used_words = set()  # Reset used words
                 return len(self.words) > 0
             else:
-                st.error("No columns found in the Excel file!")
+                st.error("CSV file must have at least 3 columns (Word, Meaning, Example)!")
                 return False
         except Exception as e:
-            st.error(f"Error reading Excel file: {e}")
+            st.error(f"Error reading CSV file: {e}")
             return False
-    
-    def get_word_meaning_online(self, word):
-        """
-        Get word meaning from online dictionary API
-        
-        Args:
-            word (str): The word to look up
-            
-        Returns:
-            str: The meaning of the word
-        """
-        # Check if we already have the meaning cached
-        if word in self.word_meanings:
-            return self.word_meanings[word]
-        
-        try:
-            # Use Free Dictionary API
-            url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word.lower()}"
-            response = requests.get(url, timeout=5)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data and len(data) > 0:
-                    # Get the first definition
-                    entry = data[0]
-                    if 'meanings' in entry and len(entry['meanings']) > 0:
-                        meaning = entry['meanings'][0]
-                        if 'definitions' in meaning and len(meaning['definitions']) > 0:
-                            definition = meaning['definitions'][0]['definition']
-                            # Cache the meaning
-                            self.word_meanings[word] = definition
-                            return definition
-            
-            # Fallback: if API fails, return a placeholder
-            fallback_meaning = f"Definition for '{word}' (API unavailable)"
-            self.word_meanings[word] = fallback_meaning
-            return fallback_meaning
-            
-        except Exception as e:
-            # If there's any error, return a placeholder
-            fallback_meaning = f"Definition for '{word}' (Error: {str(e)[:50]}...)"
-            self.word_meanings[word] = fallback_meaning
-            return fallback_meaning
     
     def select_study_words(self, n):
         """
-        Select n random words for study session and fetch their meanings
+        Select n random words for study session
         
         Args:
             n (int): Number of words to select
@@ -110,18 +86,6 @@ class VocabularyPractice:
         n = min(n, len(self.words))
         self.study_words = random.sample(self.words, n)
         self.used_words = set()  # Reset used words for this study session
-        
-        # Pre-fetch meanings for all study words
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for i, word in enumerate(self.study_words):
-            status_text.text(f"Loading meaning for: {word}")
-            self.get_word_meaning_online(word)
-            progress_bar.progress((i + 1) / len(self.study_words))
-        
-        progress_bar.empty()
-        status_text.empty()
         
         return self.study_words
     
@@ -204,30 +168,56 @@ class VocabularyPractice:
         self.study_mode = True
         self.study_start_time = datetime.now()
 
-# Create HTML for text-to-speech using the browser's built-in capabilities
-def get_text_to_speech_html(text):
+# Create HTML for text-to-speech: word twice, then example once
+def get_text_to_speech_html(word, example=""):
+    # Escape quotes for JavaScript
+    word_escaped = word.replace("'", "\\'").replace('"', '\\"')
+    example_escaped = example.replace("'", "\\'").replace('"', '\\"')
+    
     html = f"""
     <script>
         function speakText() {{
-            var msg = new SpeechSynthesisUtterance('{text}');
-            msg.lang = 'en-US';
-            window.speechSynthesis.speak(msg);
+            // Clear any existing speech
+            window.speechSynthesis.cancel();
             
-            // Wait and speak again
-            setTimeout(function() {{
-                var msg2 = new SpeechSynthesisUtterance('{text}');
-                msg2.lang = 'en-US';
-                window.speechSynthesis.speak(msg2);
-            }}, 1500);
+            // Speak word first time
+            var msg1 = new SpeechSynthesisUtterance('{word_escaped}');
+            msg1.lang = 'en-US';
+            msg1.rate = 0.8;
+            
+            // Speak word second time
+            var msg2 = new SpeechSynthesisUtterance('{word_escaped}');
+            msg2.lang = 'en-US';
+            msg2.rate = 0.8;
+            
+            // Speak example sentence
+            var msg3 = new SpeechSynthesisUtterance('{example_escaped}');
+            msg3.lang = 'en-US';
+            msg3.rate = 0.7;
+            
+            // Start speaking
+            window.speechSynthesis.speak(msg1);
+            
+            msg1.onend = function() {{
+                setTimeout(function() {{
+                    window.speechSynthesis.speak(msg2);
+                }}, 500);
+            }};
+            
+            msg2.onend = function() {{
+                setTimeout(function() {{
+                    window.speechSynthesis.speak(msg3);
+                }}, 1000);
+            }};
         }}
         
         // Speak immediately when loaded
         document.addEventListener('DOMContentLoaded', function() {{
-            speakText();
+            setTimeout(speakText, 500);
         }});
     </script>
     <button onclick="speakText()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">
-        Repeat Word
+        🔊 Repeat Word & Example
     </button>
     """
     return html
@@ -239,20 +229,20 @@ def main():
     st.title("📚 Vocabulary Practice App")
     st.write("Practice your vocabulary spelling with this app!")
     
-    # Define the path to the wordlist file in the repository
-    wordlist_path = "level234.xlsx"
+    # Define the path to the CSV file
+    csv_path = "level234.csv"
     
     # Initialize session state
     if 'vocab_practice' not in st.session_state:
         st.session_state.vocab_practice = VocabularyPractice()
-        # Try to load words immediately from local file
-        if os.path.exists(wordlist_path):
-            if st.session_state.vocab_practice.load_words_from_excel(wordlist_path):
-                st.success(f"Successfully loaded {len(st.session_state.vocab_practice.words)} words from {wordlist_path}!")
+        # Try to load words immediately from local CSV file
+        if os.path.exists(csv_path):
+            if st.session_state.vocab_practice.load_words_from_csv(csv_path):
+                st.success(f"Successfully loaded {len(st.session_state.vocab_practice.words)} words from {csv_path}!")
             else:
-                st.error(f"Failed to load words from {wordlist_path}.")
+                st.error(f"Failed to load words from {csv_path}.")
         else:
-            st.error(f"Word list file not found at {wordlist_path}.")
+            st.error(f"CSV file not found at {csv_path}. Please make sure level234.csv exists with columns: Word, Meaning, Example.")
     
     if 'is_playing' not in st.session_state:
         st.session_state.is_playing = False
@@ -294,11 +284,14 @@ def main():
             
             col1, col2 = st.columns([2, 1])
             with col1:
-                n_words = st.number_input("Number of words to study:", min_value=1, max_value=min(50, len(st.session_state.vocab_practice.words)), value=10)
-                st.info("💡 Note: Word meanings will be fetched from online dictionary")
+                n_words = st.number_input("Number of words to study:", 
+                                        min_value=1, 
+                                        max_value=len(st.session_state.vocab_practice.words), 
+                                        value=min(10, len(st.session_state.vocab_practice.words)))
+                st.info("💡 Note: Word meanings and examples will be loaded from the CSV file")
             with col2:
                 if st.button("Select Words for Study"):
-                    with st.spinner("Selecting words and loading meanings..."):
+                    with st.spinner("Selecting words..."):
                         selected_words = st.session_state.vocab_practice.select_study_words(n_words)
                         if selected_words:
                             st.session_state.study_words_selected = True
@@ -316,36 +309,41 @@ def main():
                 st.session_state.study_mode = True
                 st.rerun()
         
-        # Study mode - show words and meanings (removed 5-minute wait)
+        # Study mode - show words, meanings, and examples
         if st.session_state.study_mode and not st.session_state.is_playing:
             st.subheader("📖 Learning Phase")
-            st.write("Study these words and their meanings:")
+            st.write("Study these words, their meanings, and examples:")
             
-            # Show study words with meanings in a nice format
+            # Show study words with meanings and examples in a nice format
             for i, word in enumerate(st.session_state.vocab_practice.study_words, 1):
                 with st.container():
-                    col1, col2 = st.columns([1, 3])
+                    st.markdown(f"### {i}. {word}")
+                    
+                    col1, col2 = st.columns([1, 1])
                     with col1:
-                        st.markdown(f"**{i}. {word}**")
+                        meaning = st.session_state.vocab_practice.word_meanings.get(word.lower(), "No meaning available")
+                        st.markdown(f"**Meaning:** {meaning}")
                     with col2:
-                        meaning = st.session_state.vocab_practice.word_meanings.get(word, "Loading meaning...")
-                        st.markdown(f"*{meaning}*")
+                        example = st.session_state.vocab_practice.word_examples.get(word.lower(), "No example available")
+                        st.markdown(f"**Example:** {example}")
+                    
                     st.divider()
             
-            # Show Start Test button immediately (removed the 5-minute wait logic)
+            # Show Start Test button immediately
             st.success("✅ Ready to start the test!")
             if st.button("Start Test", type="primary"):
                 st.session_state.is_playing = True
                 # Get first word from study words
                 word = st.session_state.vocab_practice.get_random_study_word()
                 if word:
-                    st.session_state.current_word_component = get_text_to_speech_html(word)
+                    example = st.session_state.vocab_practice.word_examples.get(word.lower(), "")
+                    st.session_state.current_word_component = get_text_to_speech_html(word, example)
                     st.session_state.feedback = None
                     st.session_state.spell_checked = False
                     st.session_state.user_input_word = ""
                     st.rerun()
         
-        # Test mode (existing functionality, but using study words)
+        # Test mode
         if st.session_state.is_playing:
             st.write(f"Words practiced this session: {len(st.session_state.vocab_practice.used_words)}/{len(st.session_state.vocab_practice.study_words)}")
             
@@ -370,6 +368,7 @@ def main():
                     st.rerun()
             
             st.subheader("Spell the word you hear:")
+            st.write("Listen carefully: The word will be spoken twice, followed by an example sentence.")
             
             # Display the text-to-speech component
             if st.session_state.current_word_component:
@@ -400,16 +399,22 @@ def main():
             if st.session_state.feedback:
                 st.markdown(f"### {st.session_state.feedback}")
                 
-                # Show meaning
-                if st.session_state.vocab_practice.current_word in st.session_state.vocab_practice.word_meanings:
-                    meaning = st.session_state.vocab_practice.word_meanings[st.session_state.vocab_practice.current_word]
+                # Show meaning and example
+                current_word_lower = st.session_state.vocab_practice.current_word.lower()
+                if current_word_lower in st.session_state.vocab_practice.word_meanings:
+                    meaning = st.session_state.vocab_practice.word_meanings[current_word_lower]
                     st.markdown(f"**Meaning:** *{meaning}*")
+                
+                if current_word_lower in st.session_state.vocab_practice.word_examples:
+                    example = st.session_state.vocab_practice.word_examples[current_word_lower]
+                    st.markdown(f"**Example:** *{example}*")
                 
                 # Next word button
                 if st.button("Next Word"):
                     word = st.session_state.vocab_practice.get_random_study_word()
                     if word:
-                        st.session_state.current_word_component = get_text_to_speech_html(word)
+                        example = st.session_state.vocab_practice.word_examples.get(word.lower(), "")
+                        st.session_state.current_word_component = get_text_to_speech_html(word, example)
                         st.session_state.feedback = None
                         st.session_state.spell_checked = False
                         st.session_state.user_input_word = ""

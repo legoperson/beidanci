@@ -203,12 +203,6 @@ class VocabularyPractice:
         """Start study mode"""
         self.study_mode = True
         self.study_start_time = datetime.now()
-        
-    def can_start_test(self):
-        """Check if 5 minutes have passed since study started"""
-        if not self.study_start_time:
-            return False
-        return datetime.now() - self.study_start_time >= timedelta(minutes=5)
 
 # Create HTML for text-to-speech using the browser's built-in capabilities
 def get_text_to_speech_html(text):
@@ -322,7 +316,7 @@ def main():
                 st.session_state.study_mode = True
                 st.rerun()
         
-        # Study mode - show words and meanings
+        # Study mode - show words and meanings (removed 5-minute wait)
         if st.session_state.study_mode and not st.session_state.is_playing:
             st.subheader("📖 Learning Phase")
             st.write("Study these words and their meanings:")
@@ -338,35 +332,18 @@ def main():
                         st.markdown(f"*{meaning}*")
                     st.divider()
             
-            # Check if 5 minutes have passed
-            if st.session_state.vocab_practice.can_start_test():
-                st.success("✅ 5 minutes study time completed!")
-                if st.button("Start Test", type="primary"):
-                    st.session_state.is_playing = True
-                    # Get first word from study words
-                    word = st.session_state.vocab_practice.get_random_study_word()
-                    if word:
-                        st.session_state.current_word_component = get_text_to_speech_html(word)
-                        st.session_state.feedback = None
-                        st.session_state.spell_checked = False
-                        st.session_state.user_input_word = ""
-                        st.rerun()
-            else:
-                # Show countdown
-                elapsed_time = datetime.now() - st.session_state.vocab_practice.study_start_time
-                remaining_time = timedelta(minutes=5) - elapsed_time
-                remaining_seconds = int(remaining_time.total_seconds())
-                
-                if remaining_seconds > 0:
-                    minutes = remaining_seconds // 60
-                    seconds = remaining_seconds % 60
-                    st.info(f"⏰ Study time remaining: {minutes:02d}:{seconds:02d}")
-                    # Auto-refresh every 10 seconds to avoid too frequent updates
-                    if remaining_seconds % 10 == 0:
-                        time.sleep(1)
-                        st.rerun()
-                else:
-                    st.rerun()  # Refresh to show the test button
+            # Show Start Test button immediately (removed the 5-minute wait logic)
+            st.success("✅ Ready to start the test!")
+            if st.button("Start Test", type="primary"):
+                st.session_state.is_playing = True
+                # Get first word from study words
+                word = st.session_state.vocab_practice.get_random_study_word()
+                if word:
+                    st.session_state.current_word_component = get_text_to_speech_html(word)
+                    st.session_state.feedback = None
+                    st.session_state.spell_checked = False
+                    st.session_state.user_input_word = ""
+                    st.rerun()
         
         # Test mode (existing functionality, but using study words)
         if st.session_state.is_playing:

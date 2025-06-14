@@ -226,7 +226,7 @@ def get_text_to_speech_html(word, example=""):
 def main():
     st.set_page_config(page_title="Vocabulary Learn Practice", page_icon="📚")
     
-    st.title("📚 Vocabulary Practice App")
+    st.title("📚 Vocabulary Learn and Practice App")
     st.write("Practice your vocabulary spelling with this app!")
     
     # Define the path to the CSV file

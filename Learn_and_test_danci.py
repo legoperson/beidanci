@@ -230,7 +230,7 @@ def main():
     st.write("Practice your vocabulary spelling with this app!")
     
     # Define the path to the CSV file
-    csv_path = "level234.csv"
+    csv_path = "level234_meaning.csv"
     
     # Initialize session state
     if 'vocab_practice' not in st.session_state:

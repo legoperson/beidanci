@@ -58,7 +58,7 @@ class VocabularyPractice:
                         if example and example.lower() != 'nan':
                             self.word_examples[word.lower()] = example
                         else:
-                            self.word_examples[word.lower()] = f"Example sentence for {word}."
+                            self.word_examples[word.lower()] = f"{word}"
                 
                 self.used_words = set()  # Reset used words
                 return len(self.words) > 0
